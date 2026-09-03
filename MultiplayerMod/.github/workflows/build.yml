@@ -1,3 +1,4 @@
+```yaml
 name: Build MultiplayerMod
 
 on:
@@ -18,33 +19,38 @@ jobs:
         run: |
           wget -q https://dl.google.com/android/repository/android-ndk-r16b-linux-x86_64.zip
           unzip -q android-ndk-r16b-linux-x86_64.zip
-          mv android-ndk-r16b $HOME/android-ndk-r16b
+          mv android-ndk-r16b "$HOME/android-ndk-r16b"
 
       - name: Check NDK
         run: |
-          $HOME/android-ndk-r16b/ndk-build --version || true
+          "$HOME/android-ndk-r16b/ndk-build" --version
 
       - name: Configure CMake
         run: |
-          mkdir -p build
           cmake -S . -B build \
-            -DCMAKE_TOOLCHAIN_FILE=$HOME/android-ndk-r16b/build/cmake/android.toolchain.cmake \
+            -DCMAKE_TOOLCHAIN_FILE="$HOME/android-ndk-r16b/build/cmake/android.toolchain.cmake" \
             -DANDROID_ABI=armeabi \
             -DANDROID_PLATFORM=android-15 \
             -DANDROID_STL=gnustl_static \
+            -DANDROID_TOOLCHAIN=clang \
             -DCMAKE_BUILD_TYPE=Release
 
       - name: Build
         run: |
           cmake --build build --config Release -j2
 
-      - name: Find generated library
+      - name: Verify generated library
         run: |
-          find build -name "*.so" -type f -print
+          echo "Generated files:"
+          find build -type f -name "*.so" -print
+          echo
+          echo "Checking libmultiplayermod.so..."
+          test -f build/libmultiplayermod.so
+          ls -lh build/libmultiplayermod.so
 
       - name: Upload libmultiplayermod.so
         uses: actions/upload-artifact@v4
         with:
           name: MultiplayerMod-armeabi
-          path: |
-            build/**/*.so
+          path: build/libmultiplayermod.so
+```
