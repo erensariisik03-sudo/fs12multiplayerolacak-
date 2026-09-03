@@ -34,7 +34,7 @@ jobs:
             -DANDROID_ABI=armeabi \
             -DANDROID_PLATFORM=android-15 \
             -DANDROID_STL=gnustl_static \
-            -DANDROID_TOOLCHAIN=clang \
+            -DANDROID_TOOLCHAIN=gcc \
             -DCMAKE_BUILD_TYPE=Release
 
       - name: Build
