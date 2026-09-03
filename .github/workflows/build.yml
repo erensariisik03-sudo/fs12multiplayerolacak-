@@ -20,6 +20,9 @@ jobs:
           unzip -q android-ndk-r16b-linux-x86_64.zip
           mv android-ndk-r16b "$HOME/android-ndk-r16b"
 
+      - name: Install dependencies for NDK r16b
+        run: sudo apt-get update && sudo apt-get install -y libncurses5
+
       - name: Check NDK
         run: |
           "$HOME/android-ndk-r16b/ndk-build" --version
