@@ -1059,11 +1059,10 @@ void ModMain() {
     uintptr_t libBase = GetLibraryBase("libapp.so");
     if (libBase == 0) return;
     
-    // + 1 DEĞERLERİ KALDIRILDI (Substrate'in ARM/Thumb kontrolü otomatik yapılacak)
-    uintptr_t renderMenuAddr = libBase + 0x00033974; 
-    uintptr_t updateGUIAddr  = libBase + 0x0002f6a0; 
-    uintptr_t gameUpdateAddr = libBase + 0x00057ee8; 
-    uintptr_t inGameMenuAddr = libBase + 0x00032090; 
+    uintptr_t renderMenuAddr = libBase + 0x00033974 + 1; 
+    uintptr_t updateGUIAddr  = libBase + 0x0002f6a0 + 1; 
+    uintptr_t gameUpdateAddr = libBase + 0x00057ee8 + 1; 
+    uintptr_t inGameMenuAddr = libBase + 0x00032090 + 1;  
     
     MSHookFunction((void*)renderMenuAddr, (void*)my_renderMenu, (void**)&orig_renderMenu);
     MSHookFunction((void*)updateGUIAddr, (void*)my_updateGUI, (void**)&orig_updateGUI);
