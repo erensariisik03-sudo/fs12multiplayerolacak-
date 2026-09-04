@@ -214,8 +214,8 @@ GameUpdate_t orig_GameUpdate = nullptr;
 // ========================================================================
 // BOX2D / ARAÇ TRANSFORM TESTİ
 // Reverse-engineered libapp.so adresleri (Thumb -> +1):
-//   Vehicle::getPosition   = 0x000497da + 1
-//   Vehicle::getOrientation= 0x000497ea + 1
+//   Vehicle::getPosition   = 0x000397da + 1
+//   Vehicle::getOrientation= 0x000397ea + 1
 //   b2Body::SetTransform   = 0x00060a0c + 1
 // Vehicle + 0x528 -> b2Body*
 // ========================================================================
@@ -1160,8 +1160,8 @@ void ModMain() {
     uintptr_t inGameMenuAddr = libBase + 0x00032090 + 1;  
 
     // Reverse-engineered native calls. Ghidra'da adreslere Thumb biti (+1) eklenir.
-    g_VehicleGetPosition = (VehicleGetPosition_t)(libBase + 0x000497da + 1);
-    g_VehicleGetOrientation = (VehicleGetOrientation_t)(libBase + 0x000497ea + 1);
+    g_VehicleGetPosition = (VehicleGetPosition_t)(libBase + 0x000397da + 1);
+    g_VehicleGetOrientation = (VehicleGetOrientation_t)(libBase + 0x000397ea + 1);
     g_b2BodySetTransform = (b2BodySetTransform_t)(libBase + 0x00060a0c + 1);
 
     LOGI("Transform test funcs: getPos=%p getOri=%p setTransform=%p",
