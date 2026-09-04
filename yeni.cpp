@@ -39,7 +39,6 @@
 #define DISCOVERY_PORT 8888
 #define TCP_SYNC_PORT 8889
 
-
 // ========================================================================
 // GLOBAL DEĞİŞKENLER
 // ========================================================================
@@ -75,14 +74,19 @@ std::vector<PeerDevice> g_DiscoveredPeers;
 std::mutex g_PeerMutex;
 std::atomic<bool> g_IsSearching(false);
 
-uintptr_t g_GameInstance = 0; 
+// POINTER YÖNETİMİ (Çakışmaları önlemek için ayrıldı)
+uintptr_t g_EngineInstance = 0; 
+uintptr_t g_MenuInstance = 0;
+uintptr_t g_StartMenuInstance = 0;
+uintptr_t g_HUDInstance = 0;
+
 std::atomic<bool> g_IsHost(false);
 std::atomic<bool> g_IsClient(false);
 std::atomic<bool> g_IsConnected(false);
 
 // SOKETLER
-int g_TcpServerFd = -1; // HOST için dinleyici soketi
-int g_TcpSocket = -1;   // Aktif bağlantı soketi
+int g_TcpServerFd = -1; 
+int g_TcpSocket = -1;   
 std::string g_ConnectedStatus = "Bagli Degil";
 
 // SOHBET SİSTEMİ DEĞİŞKENLERİ
@@ -173,7 +177,6 @@ uintptr_t GetLibraryBase(const char* libName) {
     return baseAddress;
 }
 
-// SOHBETİ TEMİZLEME FONKSİYONU
 void ClearChat() {
     {
         std::lock_guard<std::mutex> lock(g_ChatMutex);
@@ -185,9 +188,6 @@ void ClearChat() {
     }
 }
 
-// ========================================================================
-// OYUNA GEÇİŞ VE MENÜ KAPATMA
-// ========================================================================
 void AutoStartGameForClient() {
     g_IsMultiplayerMenuActive = false;
     ShowNativeToast("Oyuna gecis yapiliyor. Lutfen oyunu manuel baslatin.");
@@ -330,7 +330,6 @@ void OpenAndroidKeyboard() {
     }
 }
 
-// KLAVYEYİ KAPATAN JNI FONKSİYONU
 void CloseAndroidKeyboard() {
     if (g_GlobalJavaVM == nullptr) return;
 
@@ -565,7 +564,6 @@ void TCPHostThread() {
     
     g_TcpSocket = accept(g_TcpServerFd, (struct sockaddr*)&address, (socklen_t*)&addrlen);
     
-    // Geri dönüşte sadece bağlantı varsa devam et. (Socket kapatıldıysa döngü kırılır)
     if (g_TcpSocket >= 0 && g_IsHost) {
         g_IsConnected = true;
         g_ConnectedStatus = "Istemci Baglandi!";
@@ -763,7 +761,7 @@ void DrawImGui() {
         ImGui_ImplOpenGL3_NewFrame();
         ImGui::NewFrame();
 
-        // MENÜ GEÇİŞ BUTONU (UI)
+        // MENÜ GEÇİŞ BUTONU
         if (g_CurrentMenu != MENU_INGAME && g_MultiplayerButtonTexture != 0) {
             float posX = 0.0f, posY = 0.0f;
             float targetWidth = 100.0f, targetHeight = 50.0f;
@@ -807,7 +805,6 @@ void DrawImGui() {
             ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(16.0f, 16.0f));
             ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(10.0f, 12.0f));
 
-            // SOHBET UI LAMBDA FONKSİYONU
             auto RenderChatUI = [&]() {
                 ImGui::Separator();
                 ImGui::Text("Sohbet Paneli:");
@@ -836,7 +833,6 @@ void DrawImGui() {
                 }
 
                 ImGui::SameLine();
-                // Butona basıldığında ya da Enter yapıldığında mesajı gönder ve klavyeyi kapat
                 if (ImGui::Button("Gonder", ImVec2(sendBtnWidth, 42.0f * (uiScale / 1.5f))) || enterPressed) {
                     if (strlen(inputBuffer) > 0) {
                         std::string msgStr(inputBuffer);
@@ -854,9 +850,7 @@ void DrawImGui() {
                 }
             };
             
-            // ==========================================
-            // MENU_SETTINGS (OYUN İÇİ AYARLAR VE HOST MENÜSÜ)
-            // ==========================================
+            // MENU_SETTINGS (HOST MENÜSÜ)
             if (g_CurrentMenu == MENU_SETTINGS) {
                 ImGui::Begin("Ayarlar Menusu", &g_IsMultiplayerMenuActive, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove);
                 
@@ -868,9 +862,8 @@ void DrawImGui() {
                     ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.9f, 0.2f, 0.2f, 1.0f));
                     ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.7f, 0.05f, 0.05f, 1.0f));
                     
-                    // ODADAN AYRIL - CLIENT İÇİN
                     if (ImGui::Button("Odadan Ayril", ImVec2(-1.0f, 60.0f * (uiScale / 1.5f)))) {
-                        ClearChat(); // Sohbeti temizle
+                        ClearChat(); 
                         g_IsClient = false; 
                         g_IsConnected = false;
                         if (g_TcpSocket >= 0) {
@@ -884,21 +877,19 @@ void DrawImGui() {
 
                     RenderChatUI();
                 } else {
-                    ImGui::Text("Oyun Durumu: %s", (g_GameInstance != 0) ? "Oyuna Erisildi" : "Pointer Bekleniyor...");
+                    ImGui::Text("Oyun Durumu: %s", (g_StartMenuInstance != 0) ? "Oyuna Erisildi" : "Pointer Bekleniyor...");
                     ImGui::TextColored(ImVec4(0.0f, 0.85f, 1.0f, 1.0f), "Ag Durumu: %s", g_ConnectedStatus.c_str());
                     ImGui::Separator();
 
                     if (!g_IsHost) {
-                        // ODA KUR - HOST İÇİN
                         if (ImGui::Button("Oda Kur", ImVec2(-1.0f, 80.0f * (uiScale / 1.5f)))) {
-                            ClearChat(); // Sohbeti temizle
+                            ClearChat(); 
                             g_IsHost = true;
                             std::thread(TCPHostThread).detach();
                         }
                     } else {
-                        // ODAYI KAPAT - HOST İÇİN
                         if (ImGui::Button("Odayi Kapat", ImVec2(-1.0f, 80.0f * (uiScale / 1.5f)))) {
-                            ClearChat(); // Sohbeti temizle
+                            ClearChat(); 
                             g_IsHost = false; 
                             g_IsConnected = false;
                             
@@ -923,12 +914,10 @@ void DrawImGui() {
                 }
                 ImGui::End();
             }
-            // ==========================================
-            // MENU_SAVELOAD (SADECE AĞ TARA VE KATIL - CLIENT YÖNETİMİ)
-            // ==========================================
+            // MENU_SAVELOAD (CLIENT KATILMA EKRANI)
             else if (g_CurrentMenu == MENU_SAVELOAD) {
                 ImGui::Begin("Sunucu Arama (Client) Menusu", &g_IsMultiplayerMenuActive, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove);
-                ImGui::Text("Oyun Durumu: %s", (g_GameInstance != 0) ? "Oyuna Erisildi" : "Pointer Bekleniyor...");
+                ImGui::Text("Oyun Durumu: %s", (g_MenuInstance != 0) ? "Oyuna Erisildi" : "Pointer Bekleniyor...");
                 ImGui::TextColored(ImVec4(0.0f, 0.85f, 1.0f, 1.0f), "Ag Durumu: %s", g_ConnectedStatus.c_str());
                 ImGui::Separator();
 
@@ -936,13 +925,12 @@ void DrawImGui() {
                     ImGui::Text("Kullanici Adiniz:");
                     ImGui::SetNextItemWidth(-1.0f);
                     
-                    // İSİM KUTUSU İÇİN ENTER KONTROLÜ
                     bool nickEnterPressed = ImGui::InputText("##NicknameInput", g_Nickname, IM_ARRAYSIZE(g_Nickname), ImGuiInputTextFlags_EnterReturnsTrue);
                     if (ImGui::IsItemClicked()) {
                         OpenAndroidKeyboard();
                     }
                     if (nickEnterPressed) {
-                        CloseAndroidKeyboard(); // Enter basıldığında klavyeyi kapat
+                        CloseAndroidKeyboard(); 
                     }
                     
                     ImGui::Spacing();
@@ -964,10 +952,9 @@ void DrawImGui() {
                         } else {
                             for (size_t i = 0; i < g_DiscoveredPeers.size(); i++) {
                                 std::string label = g_DiscoveredPeers[i].name + " [" + g_DiscoveredPeers[i].ip + "]"; 
-                                // ODAYA KATIL (BUTONA BASILDIĞINDA)
                                 if (ImGui::Button(label.c_str(), ImVec2(-1.0f, 48.0f * (uiScale / 1.5f)))) {
                                     if (!g_IsHost.load() && !g_IsClient.load()) {
-                                        ClearChat(); // Yeni odaya bağlanmadan önce sohbeti temizle
+                                        ClearChat(); 
                                         g_IsClient.store(true);
                                         std::string targetIP = g_DiscoveredPeers[i].ip;
                                         std::thread(TCPClientThread, targetIP).detach();
@@ -987,9 +974,8 @@ void DrawImGui() {
                     ImGui::PopStyleColor(3);
                     ImGui::Spacing();
 
-                    // BAĞLANTIYI KES BUTONU
                     if (ImGui::Button("Baglantiyi Kes", ImVec2(-1.0f, 40.0f * (uiScale / 1.5f)))) {
-                        ClearChat(); // Sohbeti temizle
+                        ClearChat(); 
                         g_IsHost = false; g_IsClient = false; g_IsConnected = false;
                         if (g_TcpSocket >= 0) {
                             shutdown(g_TcpSocket, SHUT_RDWR);
@@ -1000,16 +986,25 @@ void DrawImGui() {
                     
                     RenderChatUI();
                 }
-                
                 ImGui::End();
             }
             ImGui::PopStyleVar(2);
         }
 
         ImGui::Render();
+        
+        // OPENGL DURUMUNU KAYDET VE GERİ YÜKLE
+        GLboolean depthTestEnabled = glIsEnabled(GL_DEPTH_TEST);
+        GLboolean cullFaceEnabled = glIsEnabled(GL_CULL_FACE);
+
         glDisable(GL_DEPTH_TEST);
         glDisable(GL_CULL_FACE);
+        
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+        
+        // Oyunun eski durumunu geri ver
+        if (depthTestEnabled) glEnable(GL_DEPTH_TEST);
+        if (cullFaceEnabled) glEnable(GL_CULL_FACE);
     }
 }
 
@@ -1017,15 +1012,13 @@ void DrawImGui() {
 // RENDER KANCALARI
 // ========================================================================
 void my_GameUpdate(void* thiz, float param_1) {
-    g_GameInstance = (uintptr_t)thiz; 
+    g_EngineInstance = (uintptr_t)thiz; 
     g_CurrentMenu = MENU_INGAME; 
     if (orig_GameUpdate) orig_GameUpdate(thiz, param_1);
 }
 
 void* my_updateGUI(void* thiz, void* p1, void* p2, void* p3, void* p4) {
-    if (thiz != nullptr && g_GameInstance == 0) {
-        g_GameInstance = (uintptr_t)thiz;
-    }
+    g_HUDInstance = (uintptr_t)thiz;
 
     if (!g_TextureLoaded) {
         g_MultiplayerButtonTexture = LoadTextureFromPNGArray(buton_png_data, buton_png_len);
@@ -1035,9 +1028,7 @@ void* my_updateGUI(void* thiz, void* p1, void* p2, void* p3, void* p4) {
 }
 
 void* my_renderMenu(void* thiz, void* p1, void* p2, void* p3) {
-    if (thiz != nullptr && g_GameInstance == 0) {
-        g_GameInstance = (uintptr_t)thiz;
-    }
+    g_MenuInstance = (uintptr_t)thiz;
 
     void* ret = nullptr;
     if (orig_renderMenu) ret = orig_renderMenu(thiz, p1, p2, p3);
@@ -1047,9 +1038,7 @@ void* my_renderMenu(void* thiz, void* p1, void* p2, void* p3) {
 }
 
 void* my_renderStartMenuMain(void* thiz, void* p1, void* p2, void* p3) {
-    if (thiz != nullptr && g_GameInstance == 0) {
-        g_GameInstance = (uintptr_t)thiz;
-    }
+    g_StartMenuInstance = (uintptr_t)thiz;
 
     void* ret = nullptr;
     if (orig_renderStartMenuMain) ret = orig_renderStartMenuMain(thiz, p1, p2, p3);
@@ -1070,10 +1059,11 @@ void ModMain() {
     uintptr_t libBase = GetLibraryBase("libapp.so");
     if (libBase == 0) return;
     
-    uintptr_t renderMenuAddr = libBase + 0x00033974 + 1; 
-    uintptr_t updateGUIAddr  = libBase + 0x0002f6a0 + 1; 
-    uintptr_t gameUpdateAddr = libBase + 0x00057ee8 + 1; 
-    uintptr_t inGameMenuAddr = libBase + 0x00032090 + 1; 
+    // + 1 DEĞERLERİ KALDIRILDI (Substrate'in ARM/Thumb kontrolü otomatik yapılacak)
+    uintptr_t renderMenuAddr = libBase + 0x00033974; 
+    uintptr_t updateGUIAddr  = libBase + 0x0002f6a0; 
+    uintptr_t gameUpdateAddr = libBase + 0x00057ee8; 
+    uintptr_t inGameMenuAddr = libBase + 0x00032090; 
     
     MSHookFunction((void*)renderMenuAddr, (void*)my_renderMenu, (void**)&orig_renderMenu);
     MSHookFunction((void*)updateGUIAddr, (void*)my_updateGUI, (void**)&orig_updateGUI);
