@@ -212,6 +212,98 @@ typedef void (*GameUpdate_t)(void* thiz, float param_1);
 GameUpdate_t orig_GameUpdate = nullptr;
 
 // ========================================================================
+// BOX2D / ARAÇ TRANSFORM TESTİ
+// Reverse-engineered libapp.so adresleri (Thumb -> +1):
+//   Vehicle::getPosition   = 0x000497da + 1
+//   Vehicle::getOrientation= 0x000497ea + 1
+//   b2Body::SetTransform   = 0x00060a0c + 1
+// Vehicle + 0x528 -> b2Body*
+// ========================================================================
+struct TestB2Vec2 {
+    float x;
+    float y;
+};
+
+typedef void (*VehicleGetPosition_t)(void* vehicle, float* p1, float* p2);
+typedef float (*VehicleGetOrientation_t)(void* vehicle);
+typedef void (*b2BodySetTransform_t)(void* body, const TestB2Vec2* position, float angle);
+
+VehicleGetPosition_t g_VehicleGetPosition = nullptr;
+VehicleGetOrientation_t g_VehicleGetOrientation = nullptr;
+b2BodySetTransform_t g_b2BodySetTransform = nullptr;
+
+static bool g_TransformTestEnabled = true;
+static std::chrono::steady_clock::time_point g_LastTransformTest =
+    std::chrono::steady_clock::now();
+
+static const uint32_t TRANSFORM_TEST_INTERVAL_MS = 3000;
+static const float TRANSFORM_TEST_STEP = 1.0f;
+
+// ========================================================================
+// ARAÇ TRANSFORM TEST YARDIMCILARI
+// ========================================================================
+
+// Game::updateStateBase/updateVehicleMapDot içinde görülen gerçek indeksleme:
+// vehicle = *(Game + ((*(Game + 0xA8) + 0x2A) * 4) + 4)
+// İlk testte bu aynı erişim kullanılıyor; böylece ayrı bir vehicle scan yapmıyoruz.
+static uintptr_t GetTestVehicleFromGame(uintptr_t game) {
+    if (game == 0) return 0;
+
+    uint32_t vehicleIndex = *(uint32_t*)(game + 0xA8);
+
+    // Bozuk/uninitialized değer yüzünden rastgele bellek okumayı önle.
+    if (vehicleIndex > 512) return 0;
+
+    uintptr_t vehicleSlotAddress =
+        game + ((uintptr_t)(vehicleIndex + 0x2A) * 4u) + 4u;
+
+    return *(uintptr_t*)vehicleSlotAddress;
+}
+
+static void RunVehicleTransformTest(uintptr_t game) {
+    if (!g_TransformTestEnabled || game == 0) return;
+    if (!g_VehicleGetPosition || !g_VehicleGetOrientation || !g_b2BodySetTransform) return;
+
+    const std::chrono::steady_clock::time_point now = std::chrono::steady_clock::now();
+    const uint64_t elapsedMs = (uint64_t)std::chrono::duration_cast<std::chrono::milliseconds>(
+        now - g_LastTransformTest).count();
+
+    if (elapsedMs < TRANSFORM_TEST_INTERVAL_MS) return;
+    g_LastTransformTest = now;
+
+    uintptr_t vehicle = GetTestVehicleFromGame(game);
+    if (vehicle == 0) {
+        LOGI("[TRANSFORM TEST] Aktif vehicle bulunamadi.");
+        return;
+    }
+
+    float p1 = 0.0f;
+    float p2 = 0.0f;
+    float angle = 0.0f;
+
+    // Oyun içindeki gerçek Vehicle fonksiyonlarından mevcut transformu al.
+    g_VehicleGetPosition((void*)vehicle, &p1, &p2);
+    angle = g_VehicleGetOrientation((void*)vehicle);
+
+    uintptr_t body = *(uintptr_t*)(vehicle + 0x528);
+    if (body == 0) {
+        LOGI("[TRANSFORM TEST] Vehicle+0x528 b2Body null. vehicle=%p", (void*)vehicle);
+        return;
+    }
+
+    TestB2Vec2 newPos;
+    newPos.x = p1 + TRANSFORM_TEST_STEP;
+    newPos.y = p2;
+
+    // İlk test: açıyı değiştirmeden yalnızca ilk pozisyon bileşenini +1.0 ilerlet.
+    // Amaç SetTransform zincirini cihaz üzerinde kanıtlamak.
+    g_b2BodySetTransform((void*)body, &newPos, angle);
+
+    LOGI("[TRANSFORM TEST] vehicle=%p body=%p pos=(%.3f, %.3f) -> (%.3f, %.3f) angle=%.3f",
+         (void*)vehicle, (void*)body, p1, p2, newPos.x, newPos.y, angle);
+}
+
+// ========================================================================
 // AĞ & NETWORK FONKSİYONLARI 
 // ========================================================================
 bool IsNetworkAvailable() {
@@ -1015,6 +1107,9 @@ void my_GameUpdate(void* thiz, float param_1) {
     g_EngineInstance = (uintptr_t)thiz; 
     g_CurrentMenu = MENU_INGAME; 
     if (orig_GameUpdate) orig_GameUpdate(thiz, param_1);
+
+    // İlk aşama: network'e dokunmadan gerçek araç transformunu test et.
+    RunVehicleTransformTest(g_EngineInstance);
 }
 
 void* my_updateGUI(void* thiz, void* p1, void* p2, void* p3, void* p4) {
@@ -1063,6 +1158,16 @@ void ModMain() {
     uintptr_t updateGUIAddr  = libBase + 0x0002f6a0 + 1; 
     uintptr_t gameUpdateAddr = libBase + 0x00057ee8 + 1; 
     uintptr_t inGameMenuAddr = libBase + 0x00032090 + 1;  
+
+    // Reverse-engineered native calls. Ghidra'da adreslere Thumb biti (+1) eklenir.
+    g_VehicleGetPosition = (VehicleGetPosition_t)(libBase + 0x000497da + 1);
+    g_VehicleGetOrientation = (VehicleGetOrientation_t)(libBase + 0x000497ea + 1);
+    g_b2BodySetTransform = (b2BodySetTransform_t)(libBase + 0x00060a0c + 1);
+
+    LOGI("Transform test funcs: getPos=%p getOri=%p setTransform=%p",
+         (void*)g_VehicleGetPosition,
+         (void*)g_VehicleGetOrientation,
+         (void*)g_b2BodySetTransform);
     
     MSHookFunction((void*)renderMenuAddr, (void*)my_renderMenu, (void**)&orig_renderMenu);
     MSHookFunction((void*)updateGUIAddr, (void*)my_updateGUI, (void**)&orig_updateGUI);
